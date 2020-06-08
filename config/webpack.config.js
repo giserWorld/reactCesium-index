@@ -27,6 +27,15 @@ const typescriptFormatter = require('react-dev-utils/typescriptFormatter');
 
 const postcssNormalize = require('postcss-normalize');
 
+
+//************************1.cesium配置(CesiumJS源代码的路径)**************************/
+const CopyWebpackPlugin = require('copy-webpack-plugin');//用于资源复制
+const cesiumSource = 'node_modules/cesium/Source';
+const cesiumWorkers = '../Build/Cesium/Workers';
+//Data项是用来存放本地数据的，当需要读取本地文件时（图片、模型）需要在src文件夹下新建data文件夹存放数据
+const fileFolder = 'src';
+
+
 const appPackageJson = require(paths.appPackageJson);
 
 // Source maps are resource heavy and can cause out of memory issue for large source files.
@@ -49,6 +58,12 @@ const cssRegex = /\.css$/;
 const cssModuleRegex = /\.module\.css$/;
 const sassRegex = /\.(scss|sass)$/;
 const sassModuleRegex = /\.module\.(scss|sass)$/;
+
+
+//************************2.cesium配置less**************************/
+const lessRegex = /\.(less)$/;
+const lessModuleRegex = /\.module\.(less)$/;
+
 
 // This is the production and development configuration.
 // It is focused on developer experience, fast rebuilds, and a minimal bundle.
@@ -178,6 +193,10 @@ module.exports = function(webpackEnv) {
       // It requires a trailing slash, or the file assets will get an incorrect path.
       // We inferred the "public path" (such as / or /my-project) from homepage.
       publicPath: paths.publicUrlOrPath,
+
+//************************3.cesium配置**************************/
+      sourcePrefix: '',//解决webpack编译Cesium的多行字符串问题
+
       // Point sourcemap entries to original disk location (format as URL on Windows)
       devtoolModuleFilenameTemplate: isEnvProduction
         ? info =>
@@ -192,6 +211,11 @@ module.exports = function(webpackEnv) {
       // this defaults to 'window', but by setting it to 'this' then
       // module chunks which are built will work in web workers as well.
       globalObject: 'this',
+    },
+    //************************4.cesium配置(AMD)**************************/
+    amd: {//告诉CesiumJS，用于评估语句的AMD Webpack 版本require与标准toUrl功能不兼容
+      // Enable webpack-friendly use of require in Cesium
+      toUrlUndefined: true,
     },
     optimization: {
       minimize: isEnvProduction,
@@ -292,6 +316,12 @@ module.exports = function(webpackEnv) {
         // Support React Native Web
         // https://www.smashingmagazine.com/2016/08/a-glimpse-into-the-future-with-react-native-for-web/
         'react-native': 'react-native-web',
+
+//************************5.cesium配置(别名)**************************//
+        cesium: path.resolve(cesiumSource),//cesium别名
+        '@': path.resolve('src'),//src目录别名
+        '_c': path.resolve('src/components'),
+
         // Allows for better profiling with ReactDevTools
         ...(isEnvProductionProfile && {
           'react-dom$': 'react-dom/profiling',
@@ -485,6 +515,35 @@ module.exports = function(webpackEnv) {
                 'sass-loader'
               ),
             },
+//************************6.less样式加载器**************************//
+            {
+              test: lessRegex,
+              exclude: lessModuleRegex,
+              use: getStyleLoaders(
+                {
+                  importLoaders: 2,
+                  sourceMap: isEnvProduction && shouldUseSourceMap,
+                },
+                'less-loader'
+              ),
+              // Don't consider CSS imports dead code even if the
+              // containing package claims to have no side effects.
+              // Remove this when webpack adds a warning or an error for this.
+              // See https://github.com/webpack/webpack/issues/6571
+              sideEffects: true,
+            },
+            {
+              test: lessModuleRegex,
+              use: getStyleLoaders(
+                {
+                  importLoaders: 2,
+                  sourceMap: isEnvProduction && shouldUseSourceMap,
+                  modules: true,
+                  getLocalIdent: getCSSModuleLocalIdent,
+                },
+                'less-loader'
+              ),
+            },
             // "file" loader makes sure those assets get served by WebpackDevServer.
             // When you `import` an asset, you get its (virtual) filename.
             // In production, they would get copied to the `build` folder.
@@ -549,12 +608,32 @@ module.exports = function(webpackEnv) {
       // This gives some necessary context to module not found errors, such as
       // the requesting resource.
       new ModuleNotFoundPlugin(paths.appPath),
+//************************7.cesium配置(管理CesiumJS静态文件)**************************//
+      new CopyWebpackPlugin([
+        { from: path.join(cesiumSource, cesiumWorkers), to: 'Workers' },
+      ]),
+      new CopyWebpackPlugin([
+        { from: path.join(cesiumSource, 'Assets'), to: 'Assets' },
+      ]),
+      new CopyWebpackPlugin([
+        { from: path.join(cesiumSource, 'Widgets'), to: 'Widgets' },
+      ]),
+      new CopyWebpackPlugin([
+        { from: path.join(fileFolder, 'data'), to: 'Data'}
+      ]),
+
+
       // Makes some environment variables available to the JS code, for example:
       // if (process.env.NODE_ENV === 'production') { ... }. See `./env.js`.
       // It is absolutely essential that NODE_ENV is set to production
       // during a production build.
       // Otherwise React will be compiled in the very slow development mode.
-      new webpack.DefinePlugin(env.stringified),
+      //new webpack.DefinePlugin(env.stringified),
+//************************8.cesium配置(定义cesium相对基本路径)**************************//
+      new webpack.DefinePlugin({
+        CESIUM_BASE_URL: JSON.stringify(''),
+      }),
+
       // This is necessary to emit hot updates (currently CSS only):
       isEnvDevelopment && new webpack.HotModuleReplacementPlugin(),
       // Watcher doesn't work well if you mistype casing in a path so we use
